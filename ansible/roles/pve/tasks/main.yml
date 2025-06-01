@@ -1,0 +1,38 @@
+---
+- name: remove enterprise proxmox repositories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ remove_repos }}"
+
+- name: install packages
+  ansible.builtin.apt:
+    pkg: "{{ packages }}"
+    state: present
+    update_cache: yes
+
+- name: create partition disk for ceph
+  community.general.parted:
+    device: /dev/nvme0n1
+    number: 4
+    part_start: "107GB"
+    part_end: "100%"
+    label: gpt
+    state: present
+
+- name: create cluster on master node
+  ansible.builtin.command: pvecm create mycluster
+  args:
+    creates: /etc/pve/corosync.conf
+  when: inventory_hostname == groups['cluster'][0]
+
+- name: join cluster on other nodes
+  ansible.builtin.shell: |
+    pvecm add "{{ groups['cluster'][0] }}" << EOF
+    {{ pvepass }}
+    yes
+    EOF
+  args:
+    executable: /usr/bin/bash
+    creates: /etc/pve/corosync.conf
+  when: inventory_hostname != groups['cluster'][0]

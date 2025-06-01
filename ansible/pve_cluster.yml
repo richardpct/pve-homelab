@@ -1,0 +1,4 @@
+- name: configure PVE cluster
+  hosts: cluster
+  roles:
+    - { role: pve }

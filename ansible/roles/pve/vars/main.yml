@@ -1,0 +1,8 @@
+---
+packages:
+  - vim
+  - parted
+
+remove_repos:
+  - /etc/apt/sources.list.d/ceph.list
+  - /etc/apt/sources.list.d/pve-enterprise.list
