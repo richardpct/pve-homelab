@@ -3,6 +3,15 @@ packages:
   - vim
   - parted
 
+ceph_packages:
+  - ceph
+  - ceph-common
+  - ceph-fuse
+  - ceph-mds
+  - ceph-volume
+  - gdisk
+  - nvme-cli
+
 remove_repos:
   - /etc/apt/sources.list.d/ceph.list
   - /etc/apt/sources.list.d/pve-enterprise.list
