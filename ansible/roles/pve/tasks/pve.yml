@@ -1,0 +1,171 @@
+---
+- name: remove enterprise proxmox repositories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ remove_repos }}"
+
+- name: install packages
+  ansible.builtin.apt:
+    pkg: "{{ packages }}"
+    state: present
+    update_cache: yes
+    install_recommends: false
+  when: not ansible_check_mode
+
+- name: create partition disk for ceph
+  community.general.parted:
+    device: /dev/nvme0n1
+    number: 4
+    part_start: "107GB"
+    part_end: "100%"
+    label: gpt
+    state: present
+  when: not ansible_check_mode
+
+- name: create cluster on master node
+  ansible.builtin.command: pvecm create mycluster
+  args:
+    creates: /etc/pve/corosync.conf
+  when: inventory_hostname == groups['cluster'][0]
+
+- name: pause for 10 seconds
+  ansible.builtin.pause:
+    seconds: 10
+  when: not ansible_check_mode
+
+- name: join cluster on the nodes 2
+  ansible.builtin.shell: |
+    pvecm add "{{ groups['cluster'][0] }}" << EOF
+    {{ pvepass }}
+    yes
+    EOF
+  args:
+    executable: /usr/bin/bash
+    creates: /etc/pve/corosync.conf
+  when: inventory_hostname == groups['cluster'][1]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: join cluster on the nodes 3
+  ansible.builtin.shell: |
+    pvecm add "{{ groups['cluster'][0] }}" << EOF
+    {{ pvepass }}
+    yes
+    EOF
+  args:
+    executable: /usr/bin/bash
+    creates: /etc/pve/corosync.conf
+  when: inventory_hostname == groups['cluster'][2]
+
+- name: add ceph repository
+  ansible.builtin.apt_repository:
+    repo: deb http://download.proxmox.com/debian/ceph-squid bookworm no-subscription
+    state: present
+    filename: ceph-proxmox
+
+- name: install ceph packages
+  ansible.builtin.apt:
+    pkg: "{{ ceph_packages }}"
+    state: present
+    update_cache: yes
+    install_recommends: false
+  when: not ansible_check_mode
+
+- name: configure ceph
+  ansible.builtin.command: pveceph init --network "{{ public_network }}"
+  args:
+    creates: /etc/pve/priv/ceph.client.admin.keyring
+  when: inventory_hostname == groups['cluster'][0]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: configure ceph monitor on node 1
+  ansible.builtin.command: pveceph mon create
+  args:
+    creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
+  when: inventory_hostname == groups['cluster'][0]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: configure ceph monitor on node 2
+  ansible.builtin.command: pveceph mon create
+  args:
+    creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
+  when: inventory_hostname == groups['cluster'][1]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: configure ceph monitor on node 3
+  ansible.builtin.command: pveceph mon create
+  args:
+    creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
+  when: inventory_hostname == groups['cluster'][2]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: configure ceph mamanger on node 2
+  ansible.builtin.command: pveceph mgr create
+  args:
+    creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
+  when: inventory_hostname == groups['cluster'][1]
+
+- name: pause for 5 seconds
+  ansible.builtin.pause:
+    seconds: 5
+  when: not ansible_check_mode
+
+- name: configure ceph manager on node 3
+  ansible.builtin.command: pveceph mgr create
+  args:
+    creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
+  when: inventory_hostname == groups['cluster'][2]
+
+- name: create ceph osd
+  ansible.builtin.command: pveceph osd create "{{ osd_disk }}"
+  args:
+    creates: /run/systemd/system/ceph-osd.target.wants/ceph-osd@*.service
+
+- name: check if mypool exists
+  ansible.builtin.shell: ceph osd pool ls | grep "{{ pool_name }}"
+  register: pool_check
+  changed_when: false
+  failed_when: false
+
+- name: create ceph pools
+  ansible.builtin.command: pveceph pool create "{{ pool_name }}" --add_storages
+  when:
+    - pool_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
+
+- name: create ceph mds
+  ansible.builtin.command: pveceph mds create
+  args:
+    creates: /etc/systemd/system/ceph-mds.target.wants/ceph-mds@pve*.service
+
+- name: check if cephfs exists
+  ansible.builtin.shell: ceph fs ls | grep cephfs
+  register: cephfs_check
+  changed_when: false
+  failed_when: false
+
+- name: create cephfs
+  ansible.builtin.command: pveceph fs create --pg_num 64 --add-storage
+  when:
+    - cephfs_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]

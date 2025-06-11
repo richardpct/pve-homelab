@@ -1,0 +1,36 @@
+---
+- name: check if TerraformProv role exists
+  ansible.builtin.shell: pveum role list | grep TerraformProv
+  register: role_check
+  changed_when: false
+  failed_when: false
+
+- name: create role
+  ansible.builtin.command: pveum role add TerraformProv -privs "Datastore.AllocateSpace Datastore.AllocateTemplate Datastore.Audit Pool.Allocate Sys.Audit Sys.Console Sys.Modify VM.Allocate VM.Audit VM.Clone VM.Config.CDROM VM.Config.Cloudinit VM.Config.CPU VM.Config.Disk VM.Config.HWType VM.Config.Memory VM.Config.Network VM.Config.Options VM.Migrate VM.Monitor VM.PowerMgmt SDN.Use"
+  when:
+    - role_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
+
+- name: check if terraform-prov@pve user exists
+  ansible.builtin.shell: pveum user list | grep terraform-prov@pve
+  register: user_check
+  changed_when: false
+  failed_when: false
+
+- name: create user
+  ansible.builtin.command: pveum user add terraform-prov@pve --password "{{ terraform_prov_user }}"
+  when:
+    - user_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
+
+- name: check if the role and the user are binded
+  ansible.builtin.shell: pveum acl list | grep TerraformProv
+  register: binded_check
+  changed_when: false
+  failed_when: false
+
+- name: bind user and role
+  ansible.builtin.command: pveum aclmod / -user terraform-prov@pve -role TerraformProv
+  when:
+    - binded_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
