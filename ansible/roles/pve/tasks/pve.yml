@@ -170,6 +170,18 @@
     - cephfs_check.stdout == ""
     - inventory_hostname == groups['cluster'][0]
 
+- name: check if fs subvolume group exists
+  ansible.builtin.shell: ceph fs subvolumegroup ls cephfs | grep kubernetes
+  register: subvolume_check
+  changed_when: false
+  failed_when: false
+
+- name: create fs subvolume group
+  ansible.builtin.command: ceph fs subvolumegroup create cephfs kubernetes
+  when:
+    - subvolume_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
+
 - name: create /var/lib/vz/snippets
   ansible.builtin.file:
     path: /var/lib/vz/snippets
