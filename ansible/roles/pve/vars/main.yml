@@ -2,6 +2,7 @@
 packages:
   - vim
   - parted
+  - prometheus-node-exporter
 
 ceph_packages:
   - ceph
