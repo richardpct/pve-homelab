@@ -5,6 +5,26 @@
     state: absent
   loop: "{{ remove_repos }}"
 
+- name: add proxmox repository
+  deb822_repository:
+    name: proxmox
+    types: deb
+    uris: http://download.proxmox.com/debian/pve
+    suites: trixie
+    components:
+      - pve-no-subscription
+    signed_by: /usr/share/keyrings/proxmox-archive-keyring.gpg
+
+- name: add ceph repository
+  deb822_repository:
+    name: ceph
+    types: deb
+    uris: http://download.proxmox.com/debian/ceph-squid
+    suites: trixie
+    components:
+      - no-subscription
+    signed_by: /usr/share/keyrings/proxmox-archive-keyring.gpg
+
 - name: install packages
   ansible.builtin.apt:
     pkg: "{{ packages }}"
@@ -17,7 +37,7 @@
   community.general.parted:
     device: /dev/nvme0n1
     number: 4
-    part_start: "107GB"
+    part_start: "{{ ceph_part_start }}"
     part_end: "100%"
     label: gpt
     state: present
@@ -36,7 +56,7 @@
 
 - name: join cluster on the nodes 2
   ansible.builtin.shell: |
-    pvecm add "{{ groups['cluster'][0] }}" << EOF
+    pvecm add "{{ hostvars['pve-01'].ansible_host }}" << EOF
     {{ pvepass }}
     yes
     EOF
@@ -52,7 +72,7 @@
 
 - name: join cluster on the nodes 3
   ansible.builtin.shell: |
-    pvecm add "{{ groups['cluster'][0] }}" << EOF
+    pvecm add "{{ hostvars['pve-01'].ansible_host }}" << EOF
     {{ pvepass }}
     yes
     EOF
@@ -60,12 +80,6 @@
     executable: /usr/bin/bash
     creates: /etc/pve/corosync.conf
   when: inventory_hostname == groups['cluster'][2]
-
-- name: add ceph repository
-  ansible.builtin.apt_repository:
-    repo: deb http://download.proxmox.com/debian/ceph-squid bookworm no-subscription
-    state: present
-    filename: ceph-proxmox
 
 - name: install ceph packages
   ansible.builtin.apt:
@@ -137,7 +151,7 @@
   when: inventory_hostname == groups['cluster'][2]
 
 - name: create ceph osd
-  ansible.builtin.command: pveceph osd create "{{ osd_disk }}"
+  ansible.builtin.command: pveceph osd create "{{ ceph_osd_disk }}"
   args:
     creates: /run/systemd/system/ceph-osd.target.wants/ceph-osd@*.service
 
@@ -152,6 +166,16 @@
   when:
     - pool_check.stdout == ""
     - inventory_hostname == groups['cluster'][0]
+
+- name: wait until ceph pools is created
+  ansible.builtin.shell: ceph osd pool ls | grep "{{ pool_name }}"
+  args:
+    executable: /bin/bash
+  register: pool_created
+  until: pool_created.rc == 0
+  retries: 10
+  delay: 2
+  changed_when: false
 
 - name: create ceph mds
   ansible.builtin.command: pveceph mds create
@@ -180,6 +204,18 @@
   ansible.builtin.command: ceph fs subvolumegroup create cephfs kubernetes
   when:
     - subvolume_check.stdout == ""
+    - inventory_hostname == groups['cluster'][0]
+
+- name: check if mypool is set to autoscale
+  ansible.builtin.shell: ceph osd pool autoscale-status --format json | jq -r '.[] | select(.pool_name=="mypool") | .pg_autoscale_mode=="on"'
+  register: autoscale_check
+  changed_when: false
+  failed_when: false
+
+- name: set mypool to autoscale
+  ansible.builtin.command: ceph osd pool set {{ pool_name }} pg_autoscale_mode on
+  when:
+    - autoscale_check.stdout == "false"
     - inventory_hostname == groups['cluster'][0]
 
 - name: create /var/lib/vz/snippets

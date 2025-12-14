@@ -10,9 +10,9 @@ ceph_packages:
   - ceph-fuse
   - ceph-mds
   - ceph-volume
+  - jq
   - gdisk
   - nvme-cli
 
 remove_repos:
-  - /etc/apt/sources.list.d/ceph.list
-  - /etc/apt/sources.list.d/pve-enterprise.list
+  - /etc/apt/sources.list.d/pve-enterprise.sources
