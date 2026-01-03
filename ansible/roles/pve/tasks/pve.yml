@@ -1,4 +1,13 @@
 ---
+- name: configure bash
+  ansible.builtin.copy:
+    dest: /root/.bashrc
+    content: |
+      alias ls='ls --color'
+    owner: root
+    group: root
+    mode: '0644'
+
 - name: remove enterprise proxmox repositories
   ansible.builtin.file:
     path: "{{ item }}"
@@ -65,10 +74,16 @@
     creates: /etc/pve/corosync.conf
   when: inventory_hostname == groups['cluster'][1]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if the pve node 2 is ready
+  ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][1] }}
+  args:
+    executable: /bin/bash
+  register: pve_node_02_ready
+  until: pve_node_02_ready.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: join cluster on the nodes 3
   ansible.builtin.shell: |
@@ -80,6 +95,17 @@
     executable: /usr/bin/bash
     creates: /etc/pve/corosync.conf
   when: inventory_hostname == groups['cluster'][2]
+
+- name: check if the pve node 3 is ready
+  ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][2] }}
+  args:
+    executable: /bin/bash
+  register: pve_node_03_ready
+  until: pve_node_03_ready.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: install ceph packages
   ansible.builtin.apt:
@@ -95,10 +121,16 @@
     creates: /etc/pve/priv/ceph.client.admin.keyring
   when: inventory_hostname == groups['cluster'][0]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if ceph is initialized
+  ansible.builtin.shell: ls /etc/pve/ceph.conf
+  args:
+    executable: /bin/bash
+  register: ceph_ready
+  until: ceph_ready.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: configure ceph monitor on node 1
   ansible.builtin.command: pveceph mon create
@@ -106,10 +138,16 @@
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
   when: inventory_hostname == groups['cluster'][0]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if ceph mon is created on node 1
+  ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-01
+  args:
+    executable: /bin/bash
+  register: ceph_status
+  until: ceph_status.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: configure ceph monitor on node 2
   ansible.builtin.command: pveceph mon create
@@ -117,10 +155,16 @@
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
   when: inventory_hostname == groups['cluster'][1]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if ceph mon is created on node 2
+  ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-02
+  args:
+    executable: /bin/bash
+  register: ceph_status
+  until: ceph_status.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: configure ceph monitor on node 3
   ansible.builtin.command: pveceph mon create
@@ -128,27 +172,50 @@
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
   when: inventory_hostname == groups['cluster'][2]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if ceph mon is created on node 3
+  ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-03
+  args:
+    executable: /bin/bash
+  register: ceph_status
+  until: ceph_status.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
-- name: configure ceph mamanger on node 2
+- name: configure ceph manager on node 2
   ansible.builtin.command: pveceph mgr create
   args:
     creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
   when: inventory_hostname == groups['cluster'][1]
 
-- name: pause for 5 seconds
-  ansible.builtin.pause:
-    seconds: 5
-  when: not ansible_check_mode
+- name: check if ceph mgr is created on node 2
+  ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][1] }}
+  args:
+    executable: /bin/bash
+  register: mgr_status
+  until: mgr_status.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: configure ceph manager on node 3
   ansible.builtin.command: pveceph mgr create
   args:
     creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
   when: inventory_hostname == groups['cluster'][2]
+
+- name: check if ceph mgr is created on node 3
+  ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][2] }}
+  args:
+    executable: /bin/bash
+  register: mgr_status
+  until: mgr_status.rc == 0
+  retries: 10
+  delay: 2
+  when: inventory_hostname == groups['cluster'][0]
+  changed_when: false
 
 - name: create ceph osd
   ansible.builtin.command: pveceph osd create "{{ ceph_osd_disk }}"
@@ -175,7 +242,13 @@
   until: pool_created.rc == 0
   retries: 10
   delay: 2
+  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+
+- name: pause for 10 seconds
+  ansible.builtin.pause:
+    seconds: 10
+  when: not ansible_check_mode
 
 - name: create ceph mds
   ansible.builtin.command: pveceph mds create
