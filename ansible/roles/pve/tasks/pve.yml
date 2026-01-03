@@ -245,6 +245,11 @@
   when: inventory_hostname == groups['cluster'][0]
   changed_when: false
 
+- name: pause for 10 seconds
+  ansible.builtin.pause:
+    seconds: 10
+  when: not ansible_check_mode
+
 - name: create ceph mds
   ansible.builtin.command: pveceph mds create
   args:
