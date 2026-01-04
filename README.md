@@ -77,11 +77,14 @@ The command requires a vault password file.
 (Replace MY_VAULT_PASSWORD with your actual secure password)
 
 - Adjust some variables
+
 Generate the encrypted Proxmox VE password:
+
     $ ansible-vault encrypt_string 'MY_PVE_PASS' --name pvepass --vault-password-file ~/ansible_secrets/vault
 
 Generate the encrypted Terraform provisionner user (This user will be used for
 managing the VM using Terraform/OpenTofu):
+
     $ ansible-vault encrypt_string 'MY_TOFU_PASS' --name terraform_prov_user --vault-password-file ~/ansible_secrets/vault
 
 Then edit inventory/group_vars/all.yml and replace the pvepass and
