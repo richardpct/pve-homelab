@@ -65,20 +65,16 @@ This playbook uses Ansible Vault to secure sensitive information like
 passwords.<br />
 The command requires a vault password file.
 
-- Create a directory for your secrets (outside the repo is safer):
-
+Create a directory for your secrets (outside the repo is safer):
 
     $ mkdir -p ~/ansible_secrets
 
-- Create the vault password file containing your vault password:
-
+Create the vault password file containing your vault password:
 
     $ echo "MY_VAULT_PASSWORD" > ~/ansible_secrets/vault
     $ chmod 600 ~/ansible_secrets/vault
 
 (Replace MY_VAULT_PASSWORD with your actual secure password)
-
-- Adjust some variables
 
 Generate the encrypted Proxmox VE password:
 
