@@ -13,6 +13,7 @@ ceph_packages:
   - jq
   - gdisk
   - nvme-cli
+  - radosgw
 
 remove_repos:
   - /etc/apt/sources.list.d/pve-enterprise.sources

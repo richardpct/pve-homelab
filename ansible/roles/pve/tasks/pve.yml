@@ -56,7 +56,8 @@
   ansible.builtin.command: pvecm create mycluster
   args:
     creates: /etc/pve/corosync.conf
-  when: inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: pause for 10 seconds
   ansible.builtin.pause:
@@ -72,7 +73,8 @@
   args:
     executable: /usr/bin/bash
     creates: /etc/pve/corosync.conf
-  when: inventory_hostname == groups['cluster'][1]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][1] }}"
 
 - name: check if the pve node 2 is ready
   ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][1] }}
@@ -82,8 +84,9 @@
   until: pve_node_02_ready.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: join cluster on the nodes 3
   ansible.builtin.shell: |
@@ -94,7 +97,8 @@
   args:
     executable: /usr/bin/bash
     creates: /etc/pve/corosync.conf
-  when: inventory_hostname == groups['cluster'][2]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][2] }}"
 
 - name: check if the pve node 3 is ready
   ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][2] }}
@@ -104,8 +108,9 @@
   until: pve_node_03_ready.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: install ceph packages
   ansible.builtin.apt:
@@ -119,7 +124,8 @@
   ansible.builtin.command: pveceph init --network "{{ public_network }}"
   args:
     creates: /etc/pve/priv/ceph.client.admin.keyring
-  when: inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: check if ceph is initialized
   ansible.builtin.shell: ls /etc/pve/ceph.conf
@@ -129,14 +135,16 @@
   until: ceph_ready.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: configure ceph monitor on node 1
   ansible.builtin.command: pveceph mon create
   args:
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
-  when: inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: check if ceph mon is created on node 1
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-01
@@ -146,14 +154,16 @@
   until: ceph_status.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: configure ceph monitor on node 2
   ansible.builtin.command: pveceph mon create
   args:
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
-  when: inventory_hostname == groups['cluster'][1]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][1] }}"
 
 - name: check if ceph mon is created on node 2
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-02
@@ -163,14 +173,16 @@
   until: ceph_status.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: configure ceph monitor on node 3
   ansible.builtin.command: pveceph mon create
   args:
     creates: /etc/systemd/system/ceph-mon.target.wants/ceph-mon@pve*.service
-  when: inventory_hostname == groups['cluster'][2]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][2] }}"
 
 - name: check if ceph mon is created on node 3
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-03
@@ -180,14 +192,16 @@
   until: ceph_status.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: configure ceph manager on node 2
   ansible.builtin.command: pveceph mgr create
   args:
     creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
-  when: inventory_hostname == groups['cluster'][1]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][1] }}"
 
 - name: check if ceph mgr is created on node 2
   ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][1] }}
@@ -197,14 +211,16 @@
   until: mgr_status.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: configure ceph manager on node 3
   ansible.builtin.command: pveceph mgr create
   args:
     creates: /etc/systemd/system/ceph-mgr.target.wants/ceph-mgr@pve*.service
-  when: inventory_hostname == groups['cluster'][2]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][2] }}"
 
 - name: check if ceph mgr is created on node 3
   ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][2] }}
@@ -214,8 +230,9 @@
   until: mgr_status.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: create ceph osd
   ansible.builtin.command: pveceph osd create "{{ ceph_osd_disk }}"
@@ -227,12 +244,15 @@
   register: pool_check
   changed_when: false
   failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: create ceph pools
   ansible.builtin.command: pveceph pool create "{{ pool_name }}" --add_storages
   when:
     - pool_check.stdout == ""
-    - inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: wait until ceph pools is created
   ansible.builtin.shell: ceph osd pool ls | grep "{{ pool_name }}"
@@ -242,8 +262,9 @@
   until: pool_created.rc == 0
   retries: 10
   delay: 2
-  when: inventory_hostname == groups['cluster'][0]
   changed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: pause for 10 seconds
   ansible.builtin.pause:
@@ -260,39 +281,120 @@
   register: cephfs_check
   changed_when: false
   failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: create cephfs
   ansible.builtin.command: pveceph fs create --pg_num 64 --add-storage
   when:
     - cephfs_check.stdout == ""
-    - inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: check if fs subvolume group exists
   ansible.builtin.shell: ceph fs subvolumegroup ls cephfs | grep kubernetes
   register: subvolume_check
   changed_when: false
   failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: create fs subvolume group
   ansible.builtin.command: ceph fs subvolumegroup create cephfs kubernetes
   when:
     - subvolume_check.stdout == ""
-    - inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: check if mypool is set to autoscale
   ansible.builtin.shell: ceph osd pool autoscale-status --format json | jq -r '.[] | select(.pool_name=="mypool") | .pg_autoscale_mode=="on"'
   register: autoscale_check
   changed_when: false
   failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: set mypool to autoscale
   ansible.builtin.command: ceph osd pool set {{ pool_name }} pg_autoscale_mode on
   when:
     - autoscale_check.stdout == "false"
-    - inventory_hostname == groups['cluster'][0]
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: create the RGW keyring
+  ansible.builtin.command: >
+    ceph auth get-or-create client.rgw.{{ ansible_facts['hostname'] }}
+      osd 'allow rwx' mon 'allow rw'
+      -o /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+  args:
+    creates: /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+
+- name: ensure RGW data directory exists
+  ansible.builtin.file:
+    path: /var/lib/ceph/radosgw/ceph-rgw.{{ ansible_facts['hostname'] }}
+    state: directory
+    owner: ceph
+    group: ceph
+    mode: '0755'
+
+- name: copy the RGW keyring to /etc/pve/priv/
+  ansible.builtin.command: >
+    cp /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+      /etc/pve/priv/
+  args:
+    creates: /etc/pve/priv/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+
+- name: copy the RGW keyring to the default data directory
+  ansible.builtin.copy:
+    src: /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+    dest: /var/lib/ceph/radosgw/ceph-rgw.{{ ansible_facts['hostname'] }}/keyring
+    remote_src: true
+    owner: ceph
+    group: ceph
+    mode: '0600'
+
+- name: add RGW configuration to /etc/pve/ceph.conf
+  ansible.builtin.blockinfile:
+    path: /etc/pve/ceph.conf
+    marker: "# {mark} ANSIBLE MANAGED BLOCK RGW {{ ansible_facts['hostname'] }}"
+    block: |
+      [client.rgw.{{ ansible_facts['hostname'] }}]
+        host = {{ ansible_facts['hostname'] }}
+        keyring = /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
+        log file = /var/log/ceph/client.rgw.{{ ansible_facts['hostname'] }}.log
+        rgw_frontends = "beast endpoint={{ ansible_facts['default_ipv4']['address'] }}:7480"
+  throttle: 1
+
+- name: start and enable the RGW service
+  ansible.builtin.systemd:
+    name: ceph-radosgw@rgw.{{ ansible_facts['hostname'] }}.service
+    state: started
+    enabled: true
+
+- name: check if the s3 access key is created for velero
+  ansible.builtin.shell: radosgw-admin user info --uid=velero
+  register: access_key_exists
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: create s3 access key for velero
+  ansible.builtin.command: >
+    radosgw-admin user create
+      --uid=velero --display-name="Velero Backup"
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+  when: access_key_exists.rc != 0
 
 - name: create /var/lib/vz/snippets
   ansible.builtin.file:
     path: /var/lib/vz/snippets
     state: directory
     mode: '0755'
+
+- name: upgrade system
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: dist
+    autoremove: true
