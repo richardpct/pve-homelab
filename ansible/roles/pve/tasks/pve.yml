@@ -76,7 +76,7 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][1] }}"
 
-- name: check if the pve node 2 is ready
+- name: wait until the pve node 2 is ready
   ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][1] }}
   args:
     executable: /bin/bash
@@ -100,7 +100,7 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][2] }}"
 
-- name: check if the pve node 3 is ready
+- name: wait until the pve node 3 is ready
   ansible.builtin.shell: pvecm nodes | grep {{ groups['cluster'][2] }}
   args:
     executable: /bin/bash
@@ -127,10 +127,8 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
-- name: check if ceph is initialized
-  ansible.builtin.shell: ls /etc/pve/ceph.conf
-  args:
-    executable: /bin/bash
+- name: wait until ceph is initialized
+  ansible.builtin.command: ls /etc/pve/ceph.conf
   register: ceph_ready
   until: ceph_ready.rc == 0
   retries: 10
@@ -146,7 +144,7 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
-- name: check if ceph mon is created on node 1
+- name: wait until ceph mon is created on node 1
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-01
   args:
     executable: /bin/bash
@@ -165,7 +163,7 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][1] }}"
 
-- name: check if ceph mon is created on node 2
+- name: wait until ceph mon is created on node 2
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-02
   args:
     executable: /bin/bash
@@ -184,7 +182,7 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][2] }}"
 
-- name: check if ceph mon is created on node 3
+- name: wait until ceph mon is created on node 3
   ansible.builtin.shell: ceph -s -f json | jq .quorum_names | grep pve-03
   args:
     executable: /bin/bash
@@ -203,8 +201,9 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][1] }}"
 
-- name: check if ceph mgr is created on node 2
-  ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][1] }}
+- name: wait until ceph mgr is created on node 2
+  ansible.builtin.shell: |
+    ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][1] }}
   args:
     executable: /bin/bash
   register: mgr_status
@@ -222,8 +221,9 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][2] }}"
 
-- name: check if ceph mgr is created on node 3
-  ansible.builtin.shell: ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][2] }}
+- name: wait until ceph mgr is created on node 3
+  ansible.builtin.shell: |
+    ceph mgr dump | jq -r '.standbys[].name' | grep {{ groups['cluster'][2] }}
   args:
     executable: /bin/bash
   register: mgr_status
@@ -249,8 +249,7 @@
 
 - name: create ceph pools
   ansible.builtin.command: pveceph pool create "{{ pool_name }}" --add_storages
-  when:
-    - pool_check.stdout == ""
+  when: pool_check.stdout == ""
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
@@ -286,12 +285,11 @@
 
 - name: create cephfs
   ansible.builtin.command: pveceph fs create --pg_num 64 --add-storage
-  when:
-    - cephfs_check.stdout == ""
+  when: cephfs_check.stdout == ""
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
-- name: check if fs subvolume group exists
+- name: check if kubernetes subvolume group exists
   ansible.builtin.shell: ceph fs subvolumegroup ls cephfs | grep kubernetes
   register: subvolume_check
   changed_when: false
@@ -299,15 +297,15 @@
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
-- name: create fs subvolume group
+- name: create kubernetes subvolume group
   ansible.builtin.command: ceph fs subvolumegroup create cephfs kubernetes
-  when:
-    - subvolume_check.stdout == ""
+  when: subvolume_check.stdout == ""
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: check if mypool is set to autoscale
-  ansible.builtin.shell: ceph osd pool autoscale-status --format json | jq -r '.[] | select(.pool_name=="mypool") | .pg_autoscale_mode=="on"'
+  ansible.builtin.shell: |
+    ceph osd pool autoscale-status --format json | jq -r '.[] | select(.pool_name=="mypool") | .pg_autoscale_mode=="on"'
   register: autoscale_check
   changed_when: false
   failed_when: false
@@ -315,9 +313,9 @@
   delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: set mypool to autoscale
-  ansible.builtin.command: ceph osd pool set {{ pool_name }} pg_autoscale_mode on
-  when:
-    - autoscale_check.stdout == "false"
+  ansible.builtin.command: >
+    ceph osd pool set {{ pool_name }} pg_autoscale_mode on
+  when: autoscale_check.stdout == "false"
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
 
@@ -362,7 +360,7 @@
         host = {{ ansible_facts['hostname'] }}
         keyring = /etc/ceph/ceph.client.rgw.{{ ansible_facts['hostname'] }}.keyring
         log file = /var/log/ceph/client.rgw.{{ ansible_facts['hostname'] }}.log
-        rgw_frontends = "beast endpoint={{ ansible_facts['default_ipv4']['address'] }}:7480"
+        rgw_frontends = "beast endpoint={{ ansible_facts['default_ipv4']['address'] }}:{{ radosgw_port}}"
   throttle: 1
 
 - name: start and enable the RGW service
@@ -372,7 +370,7 @@
     enabled: true
 
 - name: check if the s3 access key is created for velero
-  ansible.builtin.shell: radosgw-admin user info --uid=velero
+  ansible.builtin.command: radosgw-admin user info --uid=velero
   register: access_key_exists
   changed_when: false
   failed_when: false
@@ -381,11 +379,33 @@
 
 - name: create s3 access key for velero
   ansible.builtin.command: >
-    radosgw-admin user create
-      --uid=velero --display-name="Velero Backup"
+    radosgw-admin user create --uid=velero --display-name="Velero Backup"
+  when: access_key_exists.rc != 0
   run_once: true
   delegate_to: "{{ groups['cluster'][0] }}"
-  when: access_key_exists.rc != 0
+
+- name: check if s3 bucket for velero exists
+  ansible.builtin.command: >
+    radosgw-admin bucket stats --bucket={{ velero_backup_bucket }}
+  register: s3_bucket_exists
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: create s3 bucket for velero
+  ansible.builtin.shell: |
+    ACCESS_KEY=$(radosgw-admin user info --uid=velero | jq -r .keys[0].access_key)
+    SECRET_KEY=$(radosgw-admin user info --uid=velero | jq -r .keys[0].secret_key)
+    s3cmd mb s3://{{ velero_backup_bucket }} \
+      --access_key=$ACCESS_KEY \
+      --secret_key=$SECRET_KEY \
+      --host={{ groups['cluster'][0] }}:{{ radosgw_port }} \
+      --host-bucket={{ groups['cluster'][0] }}:{{ radosgw_port }} \
+      --no-ssl
+  when: s3_bucket_exists.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
 
 - name: create /var/lib/vz/snippets
   ansible.builtin.file:
