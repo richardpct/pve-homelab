@@ -13,6 +13,11 @@ ceph_packages:
   - jq
   - gdisk
   - nvme-cli
+  - radosgw
+  - s3cmd
 
 remove_repos:
   - /etc/apt/sources.list.d/pve-enterprise.sources
+
+radosgw_port: 7480
+velero_backup_bucket: velero-backup
