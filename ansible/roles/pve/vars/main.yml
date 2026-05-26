@@ -21,3 +21,4 @@ remove_repos:
 
 radosgw_port: 7480
 velero_backup_bucket: velero-backup
+docker_registry_bucket: docker-registry

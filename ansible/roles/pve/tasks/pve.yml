@@ -369,6 +369,7 @@
     state: started
     enabled: true
 
+# velero bucket
 - name: check if the s3 access key is created for velero
   ansible.builtin.command: radosgw-admin user info --uid=velero
   register: access_key_exists
@@ -398,6 +399,45 @@
     ACCESS_KEY=$(radosgw-admin user info --uid=velero | jq -r .keys[0].access_key)
     SECRET_KEY=$(radosgw-admin user info --uid=velero | jq -r .keys[0].secret_key)
     s3cmd mb s3://{{ velero_backup_bucket }} \
+      --access_key=$ACCESS_KEY \
+      --secret_key=$SECRET_KEY \
+      --host={{ groups['cluster'][0] }}:{{ radosgw_port }} \
+      --host-bucket={{ groups['cluster'][0] }}:{{ radosgw_port }} \
+      --no-ssl
+  when: s3_bucket_exists.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+# docker-registry bucket
+- name: check if the s3 access key is created for docker-registry
+  ansible.builtin.command: radosgw-admin user info --uid=docker-registry
+  register: access_key_exists
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: create s3 access key for docker-registry
+  ansible.builtin.command: >
+    radosgw-admin user create --uid=docker-registry --display-name="docker registry"
+  when: access_key_exists.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: check if s3 bucket for docker-registry exists
+  ansible.builtin.command: >
+    radosgw-admin bucket stats --bucket={{ docker_registry_bucket }}
+  register: s3_bucket_exists
+  changed_when: false
+  failed_when: false
+  run_once: true
+  delegate_to: "{{ groups['cluster'][0] }}"
+
+- name: create s3 bucket for docker-registry
+  ansible.builtin.shell: |
+    ACCESS_KEY=$(radosgw-admin user info --uid=docker-registry | jq -r .keys[0].access_key)
+    SECRET_KEY=$(radosgw-admin user info --uid=docker-registry | jq -r .keys[0].secret_key)
+    s3cmd mb s3://{{ docker_registry_bucket }} \
       --access_key=$ACCESS_KEY \
       --secret_key=$SECRET_KEY \
       --host={{ groups['cluster'][0] }}:{{ radosgw_port }} \
